@@ -1,0 +1,75 @@
+#!/bin/bash
+
+if [ -z "$1" ]
+then
+	echo "CRITICAL - Please specify a URL"
+	exit
+fi
+
+if [[ $1 =~ ^\(f|ht\)tps?:// ]]
+then
+	echo "CRITICAL - Please specify a valid URL"
+	exit
+fi
+
+MAXTIME=5
+
+STARTTIME=`date '+%s.%N'`
+RESPONSE=`curl -m $MAXTIME -sLi $1`
+ENDTIME=`date '+%s.%N'`
+
+CONTENTLENGTH=0
+HTTPCODE=""
+
+if [ -n "$RESPONSE" ]
+then
+	STARTOFBODY=`echo "$RESPONSE" | egrep -n \(\<html\>\|\<\!DOCTYPE\) | head -n 1 | awk -F : '{ print $1 }'`
+	if [ "$STARTOFBODY" -gt "1" ]
+	then
+		let "STARTOFBODY -= 1"
+
+		CONTENTLENGTH=`echo "$RESPONSE" | tail -n +$STARTOFBODY | wc -c`
+		HTTPCODE=`echo "$RESPONSE" | head -n $STARTOFBODY | grep HTTP | tail -n 1 | sed -e 's/HTTP\/1.[01] //g' | tr -d '\r\n'`
+	fi
+fi
+
+TOTALTIME=`echo "scale=3;$ENDTIME - $STARTTIME" | bc`
+ROUNDEDTOTALTIME=`echo "( ( $TOTALTIME * 2 ) + 1 ) / 2" | bc`
+HALFMAXTIME=`echo "( $MAXTIME + 1) / 2" | bc`
+
+if [ -z "$HTTPCODE" ]
+then
+	echo -n "CRITICAL - Not found"
+	HTTPCODE="-1"
+
+elif [ "$CONTENTLENGTH" -lt "500" -a "$CONTENTLENGTH" -gt "0" ]
+then
+	echo -n "CRITICAL - $HTTPCODE, Low Content-length"
+
+# If the max time is < the rounded time
+elif [ "$MAXTIME" -le "$ROUNDEDTOTALTIME" ]
+then
+	echo -n "CRITICAL - Timed out"
+
+# If half max time is < the rounded half time
+elif [ "$HALFMAXTIME" -le "$ROUNDEDTOTALTIME" ]
+then
+	echo -n "WARNING - $HTTPCODE, High load time"
+
+# Non 200 or 300 HTTP code
+elif [[ "$HTTPCODE" =~ ^[45][0-9][0-9] ]]
+then
+	echo -n "WARNING - $HTTPCODE"
+
+else
+	echo -n "OK - $HTTPCODE"
+fi
+
+CONTENTKB=`echo "scale=1;$CONTENTLENGTH / 1024" | bc`
+LOADTIME=`echo "scale=3;$TOTALTIME / 1" | bc`
+STATUS=`echo "$HTTPCODE" | sed 's/[^0-9-]//g'`
+
+echo -n " ${CONTENTKB}KB in ${LOADTIME}s"
+echo -n " | "
+#echo "contentlength=${CONTENTKB}KB loadtime=${LOADTIME}s status=$STATUS"
+echo "contentlength=${CONTENTKB} loadtime=${LOADTIME}"
