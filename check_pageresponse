@@ -23,7 +23,7 @@ HTTPCODE=""
 
 if [ -n "$RESPONSE" ]
 then
-	STARTOFBODY=`echo "$RESPONSE" | egrep -n \(\<html\>\|\<\!DOCTYPE\) | head -n 1 | awk -F : '{ print $1 }'`
+	STARTOFBODY=`echo "$RESPONSE" | egrep -m 1 -n \(\<html\>\|\<\!DOCTYPE\) | awk -F : '{ print $1 }'`
 	if [ "$STARTOFBODY" -gt "1" ]
 	then
 		let "STARTOFBODY -= 1"
